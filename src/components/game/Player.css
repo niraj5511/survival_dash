@@ -1,0 +1,13 @@
+.player {
+  transition: all 0.2s ease;
+}
+
+.player.shield-active {
+  animation: shieldPulse 1s infinite;
+}
+
+@keyframes shieldPulse {
+  0% { box-shadow: 0 0 15px #001aff, 0 0 30px #0400ff, 0 0 45px #001aff; }
+  50% { box-shadow: 0 0 25px #0400ff, 0 0 50px #3700ff, 0 0 70px #1100ff; }
+  100% { box-shadow: 0 0 15px #2600ff, 0 0 30px #0026ff, 0 0 45px #0059ff; }
+}
