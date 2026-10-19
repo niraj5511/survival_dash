@@ -6,7 +6,6 @@ A full-stack web-based arcade dodge game built with React and Node.js. Players c
 
 ## Table of Contents
 
-- [Demo & Screenshots](#demo--screenshots)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
@@ -18,6 +17,9 @@ A full-stack web-based arcade dodge game built with React and Node.js. Players c
 - [API Reference](#api-reference)
 - [Data Persistence](#data-persistence)
 - [Architecture Overview](#architecture-overview)
+- [Known Limitations](#known-limitations)
+
+---
 
 ---
 
@@ -30,7 +32,7 @@ A full-stack web-based arcade dodge game built with React and Node.js. Players c
 - Cumulative stats tracked across all sessions
 - Leaderboard showing the last 10 scores
 - Cloud score storage via Snowflake with automatic localStorage fallback
-- Responsive game canvas with smooth animations
+- Fixed-size (600x800) game canvas with smooth animations
 
 ---
 
@@ -74,7 +76,8 @@ survival_dash/
 │   │   ├── difficulty.js           # Score-based speed scaling
 │   │   └── collision.js            # AABB collision detection
 │   ├── hooks/
-│   │   └── useGameLoop.js          # requestAnimationFrame hook
+│   │   ├── useGameLoop.js          # requestAnimationFrame hook (not used yet)
+│   │   └── usePlayerMovement.js    # Arrow-key hook (not used yet; GameCanvas handles movement)
 │   ├── services/
 │   │   ├── apiService.js           # Backend API calls (scores)
 │   │   └── statsService.js         # localStorage cumulative stats
@@ -106,7 +109,7 @@ survival_dash/
 ### Installation
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/niraj5511/survival_dash.git
 cd survival_dash
 npm install
 ```
@@ -189,7 +192,7 @@ Power-ups appear randomly at ~0.5% per frame and must be collected by moving the
 | 2x | Double Score | Doubles all score gains | 5 seconds |
 | Speed Boost | Speed Boost | Increases player speed from 8 to 14 | 3 seconds |
 
-Collecting a power-up also awards bonus points (+10, or +20 while Double Score is active).
+Collecting a power-up also awards bonus points: +10, or +20 if you pick up a Double Score power-up while Double Score is already active.
 
 ---
 
@@ -200,7 +203,7 @@ Collecting a power-up also awards bonus points (+10, or +20 while Double Score i
 | Surviving each frame | +0.05 |
 | Surviving each frame (Double Score active) | +0.10 |
 | Collecting a power-up | +10 |
-| Collecting a power-up (Double Score active) | +20 |
+| Collecting a Double Score power-up while Double Score is active | +20 |
 
 Score is displayed rounded to the nearest integer on the HUD and leaderboard.
 
@@ -212,20 +215,23 @@ The Express backend exposes two endpoints under `/api/scores`.
 
 ### `GET /api/scores`
 
-Returns the 10 most recent scores from Snowflake, ordered by time played (descending).
+Returns the 10 most recent scores from Snowflake, newest first.
 
 **Response:**
 ```json
-[
-  {
-    "id": 1,
-    "score": 142.5,
-    "played_at": "2025-01-15T10:30:00Z",
-    "time_survived": 48.3,
-    "objects_dodged": 31
-  }
-]
+{
+  "scores": [
+    {
+      "score": 142,
+      "date": "2025-01-15T10:30:00Z",
+      "timeSurvived": 48.3,
+      "objectsDodged": 31
+    }
+  ]
+}
 ```
+
+Returns `503` if Snowflake is unavailable.
 
 ### `POST /api/scores`
 
@@ -240,11 +246,11 @@ Saves a new score entry to Snowflake.
 }
 ```
 
-**Response:** `201 Created` with the saved record, or `503` if Snowflake is unavailable.
+**Response:** `201 Created` with `{ "success": true }`. Returns `400` if `score` is missing, or `503` if Snowflake is unavailable. `timeSurvived` and `objectsDodged` default to `0`.
 
 ### `GET /api/health`
 
-Health check endpoint. Returns `200 OK` if the server is running.
+Health check endpoint. Returns `{ "status": "ok" }` if the server is running.
 
 ---
 
@@ -258,7 +264,7 @@ The app uses a two-layer persistence strategy:
 - The leaderboard fetches from Snowflake when the backend is reachable
 
 **localStorage (fallback):**
-- `gameStats` — Cumulative stats: games played, high score, average score, total time, total dodges, total power-ups
+- `gameStats` — Cumulative stats: games played, highest score, total score, best streak, longest time, total objects dodged, total power-ups
 - `scores` — Last 10 scores (used as leaderboard fallback)
 - `events` — Last 500 analytics events (for debugging)
 
@@ -282,6 +288,18 @@ Express Server (port 3001)
   └── /api/health
 ```
 
-**Game loop:** `GameCanvas.jsx` drives the entire game using `requestAnimationFrame` at 60 FPS. All game state (player position, falling objects, power-ups, score) is managed via React refs to avoid unnecessary re-renders. The HUD and overlay components re-render only when game-level state (score, game-over status, active effects) changes.
+**Game loop:** `GameCanvas.jsx` drives the entire game using `requestAnimationFrame`. Falling objects and power-ups are stored in React refs, while score, time, streak, active power-ups, and the player position are kept in React state. The loop updates score, time, and a tick counter on every frame, so the game component re-renders each frame.
 
 **Collision detection:** Uses axis-aligned bounding box (AABB) overlap checks between the player rectangle and each falling object or power-up on every frame.
+
+---
+
+## Known Limitations
+
+- Game speed is tied to frames, not time. On displays with a refresh rate above 60 Hz, objects fall and score accumulates faster.
+- `POST /api/scores` has no validation or authentication, and CORS is open, so anyone who can reach the server can submit any score.
+- `npm start` runs only the Express API. It does not serve the built frontend, and the `/api` proxy in `vite.config.js` exists only in development. For deployment, host the frontend separately and route `/api` to the backend.
+- The leaderboard shows the 10 most recent scores, not the 10 highest.
+- Controls are keyboard-only (Arrow Left / Arrow Right).
+
+---
